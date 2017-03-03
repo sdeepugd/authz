@@ -1,9 +1,6 @@
 FROM alpine:3.3
 MAINTAINER Liron Levin <liron@twistlock.com>
 
-
-
-
 # Indicates basic authorization is enforced
 ENV AUTHORIZER basic
 
