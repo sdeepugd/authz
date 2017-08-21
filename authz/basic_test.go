@@ -9,10 +9,12 @@ import (
 
 func TestPolicyApply(t *testing.T) {
 
-	policy := `{"name":"policy_1","users":["user_1","user_2"],"actions":["container_create","docker_version"]}
+	policy := `{"name":"policy_1","users":["user_1","user_2"],"actions":["container_create","docker_version"],"path":"/home/local/ZOHOCORP/deepak-3386/Repositories/Foreign/Go/authz/src/github.com/sdeepugd/authz/authz/filepath.json"}
 	           {"name":"policy_2","users":["user_3","user_4"],"actions":["container_create","container_exec"]}
 	           {"name":"policy_3","users":["user_5"],"actions":["container"]}
 	           {"name":"policy_4","users":["user_6"],"actions":["container"], "readonly":true }` // User can do anything with containers
+
+	var byt = []byte(`{"Hostname":"naranderan.r","HostConfig":{"PublishAllPorts":true,"Binds":["/home/local/ZOHOCORP/deepak-3386/Documents/ZohoCode/workspace/2000000000041/2000000000043/2000000014001/workspace:/home/workspace"],"Memory":1073741824,"CpuPeriod":100000,"PidsLimit":1000,"CpuQuota":100000,"CpusetCpus":"1"},"Tty":true,"Image":"cmtools.csez.zohocorpin.com:5000/cide/go","Env":["GROUPID=618136065","TZ=Asia/Calcutta","USERID=618149802"]}`)
 
 	const policyFileName = "/tmp/policy.json"
 	err := ioutil.WriteFile(policyFileName, []byte(policy), 0755)
@@ -24,13 +26,14 @@ func TestPolicyApply(t *testing.T) {
 		user           string // user is the user in the request
 		allow          bool   // allow is the allow/deny response from the policy plugin
 		expectedPolicy string // expectedPolicy is the expected policy name that should appear in the message
+		requestbody    []byte
 	}{
-		{"GET", "/v1.21/version", "user_1", true, "policy_1"},                // User and command allowed
-		{"GET", "/v1.21/version", "user_3", false, "policy_2"},               // User and command not allowed
-		{"GET", "/v1.21/version", "user_5", false, ""},                       // Non existing user (no policy found)
-		{"GET", "/v1.21/containers/id/json", "user_5", true, "policy_3"},     // All containers action allowed
-		{"GET", "/v1.21/containers/id/json", "user_6", true, "policy_4"},     // Readonly policy - GET allowed
-		{"POST", "/v1.21/containers/id/rename", "user_6", false, "policy_4"}, // Readonly policy - GET denied
+		{"GET", "/v1.21/version", "user_1", true, "policy_1",byt},                // User and command allowed
+		{"GET", "/v1.21/version", "user_3", false, "policy_2", byt},               // User and command not allowed
+		{"GET", "/v1.21/version", "user_5", false, "",byt},                       // Non existing user (no policy found)
+		{"GET", "/v1.21/containers/id/json", "user_5", true, "policy_3",byt},     // All containers action allowed
+		{"GET", "/v1.21/containers/id/json", "user_6", true, "policy_4",byt},     // Readonly policy - GET allowed
+		{"POST", "/v1.21/containers/id/rename", "user_6", false, "policy_4",byt}, // Readonly policy - GET denied
 	}
 
 	authorizer := NewBasicAuthZAuthorizer(&BasicAuthorizerSettings{PolicyPath: policyFileName})
@@ -38,7 +41,7 @@ func TestPolicyApply(t *testing.T) {
 	assert.NoError(t, authorizer.Init(), "Initialization must be succesfull")
 
 	for _, test := range tests {
-		res := authorizer.AuthZReq(&authorization.Request{RequestMethod: test.method, RequestURI: test.uri, User: test.user})
+		res := authorizer.AuthZReq(&authorization.Request{RequestMethod: test.method, RequestURI: test.uri, User: test.user, RequestBody: test.requestbody})
 		assert.Equal(t, res.Allow, test.allow, "Request must be allowed/denied based on policy")
 		assert.Contains(t, res.Msg, test.expectedPolicy, "Policy name must appear in the response")
 	}

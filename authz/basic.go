@@ -7,13 +7,17 @@ import (
 	logrus_syslog "github.com/Sirupsen/logrus/hooks/syslog"
 	"github.com/docker/docker/pkg/authorization"
 	"github.com/howeyc/fsnotify"
-	"github.com/twistlock/authz/core"
+	"github.com/sdeepugd/authz/core"
 	"io/ioutil"
 	"log/syslog"
 	"os"
 	"path"
 	"regexp"
 	"strings"
+	"github.com/docker/docker/runconfig"
+	"bytes"
+	"container/list"
+	"path/filepath"
 )
 
 // BasicPolicy represent a single policy object that is evaluated in the authorization flow.
@@ -33,6 +37,12 @@ type BasicPolicy struct {
 	Users    []string `json:"users"`    // Users are the users for which this policy apply to
 	Name     string   `json:"name"`     // Name is the policy name
 	Readonly bool     `json:"readonly"` // Readonly indicates this policy only allow get commands
+	Filepaths string `json:"path"`  //filepaths that the user allowed to mount.It is a localtion of allowed filepaths
+	Mounts AllowedFilePaths
+}
+
+type AllowedFilePaths struct {
+	AllowedPaths []string `json:"allowedmounts"`
 }
 
 const (
@@ -118,6 +128,11 @@ func (f *basicAuthorizer) loadPolicies() error {
 
 		var policy BasicPolicy
 		err := json.Unmarshal([]byte(l), &policy)
+
+		if policy.Filepaths != "" {
+			policy.Mounts = loadAllowedMounts(policy.Filepaths)
+		}
+
 		if err != nil {
 			logrus.Errorf("Failed to unmarshel policy entry %q %q", l, err.Error())
 		}
@@ -144,6 +159,20 @@ func (f *basicAuthorizer) loadPolicies() error {
 	return nil
 }
 
+func loadAllowedMounts(filepath string) AllowedFilePaths {
+	data, err := ioutil.ReadFile(path.Join(filepath))
+	if(err == nil){
+		logrus.Error(err)
+	}
+	var filepaths AllowedFilePaths
+	errjson := json.Unmarshal(data,&filepaths)
+	if(errjson == nil){
+		logrus.Error(errjson)
+	}
+	fmt.Println("data : ",filepath)
+	return filepaths
+}
+
 func (f *basicAuthorizer) AuthZReq(authZReq *authorization.Request) *authorization.Response {
 
 	logrus.Debugf("Received AuthZ request, method: '%s', url: '%s'", authZReq.RequestMethod, authZReq.RequestURI)
@@ -159,7 +188,13 @@ func (f *basicAuthorizer) AuthZReq(authZReq *authorization.Request) *authorizati
 						logrus.Errorf("Failed to evaulate action %q against policy %q error %q", action, policyActionPattern, err.Error())
 					}
 
+
 					if match {
+
+						if len(policy.Mounts.AllowedPaths) > 0{
+							hostMount := getHostMountFromRequest(authZReq)
+							match = AuthoriseMountsPaths(hostMount,policy.Mounts.AllowedPaths)
+						}
 
 						if policy.Readonly && authZReq.RequestMethod != "GET" {
 							return &authorization.Response{
@@ -186,6 +221,49 @@ func (f *basicAuthorizer) AuthZReq(authZReq *authorization.Request) *authorizati
 		Allow: false,
 		Msg:   fmt.Sprintf("no policy applied (user: '%s' action: '%s')", authZReq.User, action),
 	}
+}
+func AuthoriseMountsPaths(hostMounts []string, allowedMounts []string) bool {
+	//var gisvalid bool = false
+	//for _,hostMount := range hostMounts {
+	//	var isvalid bool = false
+	//	for _,allowedMount := range allowedMounts {
+	//
+	//	}
+	//
+	//}
+}
+
+func isValidPaths(host string, allowedMount string) bool {
+	hosterr,hostExist,cleanhost := checkCleanandExists(host)
+	if(hostExist && hosterr != nil){
+		return strings.HasPrefix(cleanhost,allowedMount)
+	}
+	return false;
+}
+
+func checkCleanandExists(path string) (error,bool,string) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return err,false,""
+		}
+	}
+	return nil,true,filepath.Clean(path)
+}
+
+func getHostMountFromRequest(authreq *authorization.Request) []string {
+	decoder := runconfig.ContainerDecoder{}
+	_, hostConfig, _, _ := decoder.DecodeConfig(bytes.NewReader(authreq.RequestBody))
+	hostmountlist := list.New()
+	for _,bind := range hostConfig.Binds{
+		mounts := strings.Split(bind,":")
+		host := mounts[0]
+		hostmountlist.PushBack(host)
+	}
+	hostmountarr := make([]string, hostmountlist.Len())
+	for i := 0; i < hostmountlist.Len(); i++ {
+		hostmountarr[i] = hostmountlist.Back().Value.(string)        // <-- changed
+	}
+	return hostmountarr
 }
 
 // AuthZRes always allow responses from server

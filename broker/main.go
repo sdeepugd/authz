@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/cli"
-	"github.com/twistlock/authz/authz"
-	"github.com/twistlock/authz/core"
+	"github.com/sdeepugd/authz/authz"
+	"github.com/sdeepugd/authz/core"
 	"os"
 )
 
@@ -102,7 +102,6 @@ func main() {
 
 // initLogger initialize the logger based on the log level
 func initLogger(debug bool) {
-
 	logrus.SetFormatter(&logrus.TextFormatter{})
 	// Output to stderr instead of stdout, could also be a file.
 	logrus.SetOutput(os.Stdout)

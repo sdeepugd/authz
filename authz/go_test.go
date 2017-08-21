@@ -7,6 +7,7 @@ import (
 	"github.com/docker/docker/pkg/authorization"
 	"bytes"
 	"strings"
+	"path/filepath"
 )
 
 func TestJson(t *testing.T) {
@@ -21,5 +22,10 @@ func TestJson(t *testing.T) {
 		container := mounts[1]
 		fmt.Println("host ",host," container ",container)
 	}
+}
 
+func TestPaths(t *testing.T) {
+	path := "/home/local/ZOHOCORP/deepak-3386/Analysis/Ceph/ceph/src/../../ceph/../../Go/GoTest"
+	cleanPath, err := filepath.EvalSymlinks()
+	fmt.Println(cleanPath)
 }
