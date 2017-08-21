@@ -193,7 +193,14 @@ func (f *basicAuthorizer) AuthZReq(authZReq *authorization.Request) *authorizati
 
 						if len(policy.Mounts.AllowedPaths) > 0{
 							hostMount := getHostMountFromRequest(authZReq)
-							match = AuthoriseMountsPaths(hostMount,policy.Mounts.AllowedPaths)
+							isValidMount := AuthoriseMountsPaths(hostMount,policy.Mounts.AllowedPaths)
+							if(!isValidMount){
+								match = false
+								return &authorization.Response{
+									Allow: false,
+									Msg:   fmt.Sprintf("action '%s' not allowed for user '%s' since the given mount path is not valid by policy '%s'", action, authZReq.User, policy.Name),
+								}
+							}
 						}
 
 						if policy.Readonly && authZReq.RequestMethod != "GET" {
@@ -223,14 +230,20 @@ func (f *basicAuthorizer) AuthZReq(authZReq *authorization.Request) *authorizati
 	}
 }
 func AuthoriseMountsPaths(hostMounts []string, allowedMounts []string) bool {
-	//var gisvalid bool = false
-	//for _,hostMount := range hostMounts {
-	//	var isvalid bool = false
-	//	for _,allowedMount := range allowedMounts {
-	//
-	//	}
-	//
-	//}
+	for _,hostMount := range hostMounts {
+		if(!isHostmountPresentinAllowedMount(hostMount,allowedMounts)){
+			return false
+		}
+	}
+	return true
+}
+func isHostmountPresentinAllowedMount(hostMount string, allowedMounts []string) bool {
+	for _,allowedMount := range allowedMounts {
+		if(isValidPaths(hostMount,allowedMount)){
+			return true
+		}
+	}
+	return false
 }
 
 func isValidPaths(host string, allowedMount string) bool {
@@ -241,9 +254,17 @@ func isValidPaths(host string, allowedMount string) bool {
 	return false;
 }
 
+func isdir(path string) bool {
+	fi, err := os.Lstat(path)
+	if(err != nil){
+		panic(err)
+	}
+	return (fi.Mode() & os.ModeDir != 0)
+}
+
 func checkCleanandExists(path string) (error,bool,string) {
 	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
+		if (os.IsNotExist(err) && !isdir(path)) {
 			return err,false,""
 		}
 	}
