@@ -28,12 +28,12 @@ func TestPolicyApply(t *testing.T) {
 		expectedPolicy string // expectedPolicy is the expected policy name that should appear in the message
 		requestbody    []byte
 	}{
-		{"GET", "/v1.21/version", "user_1", true, "policy_1",byt},                // User and command allowed
+		{"GET", "/v1.21/version", "user_1", true, "policy_1", byt},                // User and command allowed
 		{"GET", "/v1.21/version", "user_3", false, "policy_2", byt},               // User and command not allowed
-		{"GET", "/v1.21/version", "user_5", false, "",byt},                       // Non existing user (no policy found)
-		{"GET", "/v1.21/containers/id/json", "user_5", true, "policy_3",byt},     // All containers action allowed
-		{"GET", "/v1.21/containers/id/json", "user_6", true, "policy_4",byt},     // Readonly policy - GET allowed
-		{"POST", "/v1.21/containers/id/rename", "user_6", false, "policy_4",byt}, // Readonly policy - GET denied
+		{"GET", "/v1.21/version", "user_5", false, "", byt},                       // Non existing user (no policy found)
+		{"GET", "/v1.21/containers/id/json", "user_5", true, "policy_3", byt},     // All containers action allowed
+		{"GET", "/v1.21/containers/id/json", "user_6", true, "policy_4", byt},     // Readonly policy - GET allowed
+		{"POST", "/v1.21/containers/id/rename", "user_6", false, "policy_4", byt}, // Readonly policy - GET denied
 	}
 
 	authorizer := NewBasicAuthZAuthorizer(&BasicAuthorizerSettings{PolicyPath: policyFileName})

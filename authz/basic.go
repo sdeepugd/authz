@@ -1,23 +1,23 @@
 package authz
 
 import (
+	"bytes"
+	"container/list"
 	"encoding/json"
 	"fmt"
 	"github.com/Sirupsen/logrus"
 	logrus_syslog "github.com/Sirupsen/logrus/hooks/syslog"
 	"github.com/docker/docker/pkg/authorization"
+	"github.com/docker/docker/runconfig"
 	"github.com/howeyc/fsnotify"
 	"github.com/sdeepugd/authz/core"
 	"io/ioutil"
 	"log/syslog"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
-	"github.com/docker/docker/runconfig"
-	"bytes"
-	"container/list"
-	"path/filepath"
 )
 
 // BasicPolicy represent a single policy object that is evaluated in the authorization flow.
@@ -34,11 +34,11 @@ import (
 type BasicPolicy struct {
 	Actions []string `json:"actions"` // Actions are the docker actions (mapped to authz terminology) that are allowed according to this policy
 	// Action are are specified as regular expressions
-	Users    []string `json:"users"`    // Users are the users for which this policy apply to
-	Name     string   `json:"name"`     // Name is the policy name
-	Readonly bool     `json:"readonly"` // Readonly indicates this policy only allow get commands
-	Filepaths string `json:"path"`  //filepaths that the user allowed to mount.It is a localtion of allowed filepaths
-	Mounts AllowedFilePaths
+	Users     []string `json:"users"`    // Users are the users for which this policy apply to
+	Name      string   `json:"name"`     // Name is the policy name
+	Readonly  bool     `json:"readonly"` // Readonly indicates this policy only allow get commands
+	Filepaths string   `json:"path"`     //filepaths that the user allowed to mount.It is a localtion of allowed filepaths
+	Mounts    AllowedFilePaths
 }
 
 type AllowedFilePaths struct {
@@ -161,15 +161,15 @@ func (f *basicAuthorizer) loadPolicies() error {
 
 func loadAllowedMounts(filepath string) AllowedFilePaths {
 	data, err := ioutil.ReadFile(path.Join(filepath))
-	if(err == nil){
+	if err == nil {
 		logrus.Error(err)
 	}
 	var filepaths AllowedFilePaths
-	errjson := json.Unmarshal(data,&filepaths)
-	if(errjson == nil){
+	errjson := json.Unmarshal(data, &filepaths)
+	if errjson == nil {
 		logrus.Error(errjson)
 	}
-	fmt.Println("data : ",filepath)
+	fmt.Println("data : ", filepath)
 	return filepaths
 }
 
@@ -188,13 +188,12 @@ func (f *basicAuthorizer) AuthZReq(authZReq *authorization.Request) *authorizati
 						logrus.Errorf("Failed to evaulate action %q against policy %q error %q", action, policyActionPattern, err.Error())
 					}
 
-
 					if match {
 
-						if len(policy.Mounts.AllowedPaths) > 0{
+						if len(policy.Mounts.AllowedPaths) > 0 {
 							hostMount := getHostMountFromRequest(authZReq)
-							isValidMount := AuthoriseMountsPaths(hostMount,policy.Mounts.AllowedPaths)
-							if(!isValidMount){
+							isValidMount := AuthoriseMountsPaths(hostMount, policy.Mounts.AllowedPaths)
+							if !isValidMount {
 								match = false
 								return &authorization.Response{
 									Allow: false,
@@ -230,16 +229,16 @@ func (f *basicAuthorizer) AuthZReq(authZReq *authorization.Request) *authorizati
 	}
 }
 func AuthoriseMountsPaths(hostMounts []string, allowedMounts []string) bool {
-	for _,hostMount := range hostMounts {
-		if(!isHostmountPresentinAllowedMount(hostMount,allowedMounts)){
+	for _, hostMount := range hostMounts {
+		if !isHostmountPresentinAllowedMount(hostMount, allowedMounts) {
 			return false
 		}
 	}
 	return true
 }
 func isHostmountPresentinAllowedMount(hostMount string, allowedMounts []string) bool {
-	for _,allowedMount := range allowedMounts {
-		if(isValidPaths(hostMount,allowedMount)){
+	for _, allowedMount := range allowedMounts {
+		if isValidPaths(hostMount, allowedMount) {
 			return true
 		}
 	}
@@ -247,42 +246,42 @@ func isHostmountPresentinAllowedMount(hostMount string, allowedMounts []string) 
 }
 
 func isValidPaths(host string, allowedMount string) bool {
-	hosterr,hostExist,cleanhost := checkCleanandExists(host)
-	if(hostExist && hosterr != nil){
-		return strings.HasPrefix(cleanhost,allowedMount)
+	hosterr, hostExist, cleanhost := checkCleanandExists(host)
+	if hostExist && hosterr != nil {
+		return strings.HasPrefix(cleanhost, allowedMount)
 	}
-	return false;
+	return false
 }
 
 func isdir(path string) bool {
 	fi, err := os.Lstat(path)
-	if(err != nil){
+	if err != nil {
 		panic(err)
 	}
-	return (fi.Mode() & os.ModeDir != 0)
+	return (fi.Mode()&os.ModeDir != 0)
 }
 
-func checkCleanandExists(path string) (error,bool,string) {
+func checkCleanandExists(path string) (error, bool, string) {
 	if _, err := os.Stat(path); err != nil {
-		if (os.IsNotExist(err) && !isdir(path)) {
-			return err,false,""
+		if os.IsNotExist(err) && !isdir(path) {
+			return err, false, ""
 		}
 	}
-	return nil,true,filepath.Clean(path)
+	return nil, true, filepath.Clean(path)
 }
 
 func getHostMountFromRequest(authreq *authorization.Request) []string {
 	decoder := runconfig.ContainerDecoder{}
 	_, hostConfig, _, _ := decoder.DecodeConfig(bytes.NewReader(authreq.RequestBody))
 	hostmountlist := list.New()
-	for _,bind := range hostConfig.Binds{
-		mounts := strings.Split(bind,":")
+	for _, bind := range hostConfig.Binds {
+		mounts := strings.Split(bind, ":")
 		host := mounts[0]
 		hostmountlist.PushBack(host)
 	}
 	hostmountarr := make([]string, hostmountlist.Len())
 	for i := 0; i < hostmountlist.Len(); i++ {
-		hostmountarr[i] = hostmountlist.Back().Value.(string)        // <-- changed
+		hostmountarr[i] = hostmountlist.Back().Value.(string) // <-- changed
 	}
 	return hostmountarr
 }

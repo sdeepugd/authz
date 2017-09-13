@@ -104,7 +104,11 @@ func main() {
 func initLogger(debug bool) {
 	logrus.SetFormatter(&logrus.TextFormatter{})
 	// Output to stderr instead of stdout, could also be a file.
-	logrus.SetOutput(os.Stdout)
+	logfile := "/var/log/authz.log"
+	f, err := os.Create(logfile)
+	fmt.Println("log file :" + logfile)
+	panic(err)
+	logrus.SetOutput(f)
 	// Only log the warning severity or above.
 	logrus.SetLevel(logrus.DebugLevel)
 	if debug {
