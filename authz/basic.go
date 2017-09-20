@@ -175,10 +175,11 @@ func loadAllowedMounts(filepath string) AllowedFilePaths {
 
 func (f *basicAuthorizer) AuthZReq(authZReq *authorization.Request) *authorization.Response {
 
-	logrus.Debugf("Received AuthZ request, method: '%s', url: '%s'", authZReq.RequestMethod, authZReq.RequestURI)
+	logrus.Infof("Received AuthZ request, method: '%s', url: '%s'", authZReq.RequestMethod, authZReq.RequestURI)
 
 	action := core.ParseRoute(authZReq.RequestMethod, authZReq.RequestURI)
-
+	fmt.Println("action : "+ action)
+	fmt.Println("action required: "+ core.ActionContainerCreate)
 	for _, policy := range f.policies {
 		for _, user := range policy.Users {
 			if user == authZReq.User {
@@ -189,19 +190,19 @@ func (f *basicAuthorizer) AuthZReq(authZReq *authorization.Request) *authorizati
 					}
 
 					if match {
-
-						if len(policy.Mounts.AllowedPaths) > 0 {
-							hostMount := getHostMountFromRequest(authZReq)
-							isValidMount := AuthoriseMountsPaths(hostMount, policy.Mounts.AllowedPaths)
-							if !isValidMount {
-								match = false
-								return &authorization.Response{
-									Allow: false,
-									Msg:   fmt.Sprintf("action '%s' not allowed for user '%s' since the given mount path is not valid by policy '%s'", action, authZReq.User, policy.Name),
+						if action == core.ActionContainerCreate {
+							if len(policy.Mounts.AllowedPaths) > 0 {
+								hostMount := getHostMountFromRequest(authZReq)
+								isValidMount := AuthoriseMountsPaths(hostMount, policy.Mounts.AllowedPaths)
+								if !isValidMount {
+									match = false
+									return &authorization.Response{
+										Allow: false,
+										Msg:   fmt.Sprintf("action '%s' not allowed for user '%s' since the given mount path is not valid by policy '%s'", action, authZReq.User, policy.Name),
+									}
 								}
 							}
 						}
-
 						if policy.Readonly && authZReq.RequestMethod != "GET" {
 							return &authorization.Response{
 								Allow: false,
@@ -230,6 +231,7 @@ func (f *basicAuthorizer) AuthZReq(authZReq *authorization.Request) *authorizati
 }
 func AuthoriseMountsPaths(hostMounts []string, allowedMounts []string) bool {
 	for _, hostMount := range hostMounts {
+		fmt.Println("hostmount " + hostMount)
 		if !isHostmountPresentinAllowedMount(hostMount, allowedMounts) {
 			return false
 		}
@@ -238,6 +240,7 @@ func AuthoriseMountsPaths(hostMounts []string, allowedMounts []string) bool {
 }
 func isHostmountPresentinAllowedMount(hostMount string, allowedMounts []string) bool {
 	for _, allowedMount := range allowedMounts {
+		fmt.Println("allowedmounts:" + allowedMount)
 		if isValidPaths(hostMount, allowedMount) {
 			return true
 		}
@@ -245,9 +248,21 @@ func isHostmountPresentinAllowedMount(hostMount string, allowedMounts []string) 
 	return false
 }
 
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
 func isValidPaths(host string, allowedMount string) bool {
 	hosterr, hostExist, cleanhost := checkCleanandExists(host)
-	if hostExist && hosterr != nil {
+	check(hosterr)
+	fmt.Println("cleanhost: " + cleanhost);
+	if hostExist && hosterr == nil {
+		fmt.Println("cleanhost:" + cleanhost)
+		if strings.HasPrefix(cleanhost, allowedMount) {
+			fmt.Println("has prefix:" + cleanhost)
+		}
 		return strings.HasPrefix(cleanhost, allowedMount)
 	}
 	return false
@@ -258,13 +273,23 @@ func isdir(path string) bool {
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("isdir func")
 	return (fi.Mode()&os.ModeDir != 0)
 }
 
 func checkCleanandExists(path string) (error, bool, string) {
-	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) && !isdir(path) {
+	path,symerr := filepath.EvalSymlinks(path)
+	if symerr != nil {
+		if !isdir(path) {
+			return symerr, false, ""
+			fmt.Println("returned")
+		}
+	}
+	_, err := os.Stat(path)
+	if err != nil {
+		if !isdir(path) {
 			return err, false, ""
+			fmt.Println("returned")
 		}
 	}
 	return nil, true, filepath.Clean(path)
@@ -274,10 +299,12 @@ func getHostMountFromRequest(authreq *authorization.Request) []string {
 	decoder := runconfig.ContainerDecoder{}
 	_, hostConfig, _, _ := decoder.DecodeConfig(bytes.NewReader(authreq.RequestBody))
 	hostmountlist := list.New()
-	for _, bind := range hostConfig.Binds {
-		mounts := strings.Split(bind, ":")
-		host := mounts[0]
-		hostmountlist.PushBack(host)
+	if hostConfig != nil {
+		for _, bind := range hostConfig.Binds {
+			mounts := strings.Split(bind, ":")
+			host := mounts[0]
+			hostmountlist.PushBack(host)
+		}
 	}
 	hostmountarr := make([]string, hostmountlist.Len())
 	for i := 0; i < hostmountlist.Len(); i++ {

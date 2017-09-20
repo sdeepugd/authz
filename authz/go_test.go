@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"path/filepath"
 )
 
 func TestJson(t *testing.T) {
@@ -22,6 +23,11 @@ func TestJson(t *testing.T) {
 		container := mounts[1]
 		fmt.Println("host ", host, " container ", container)
 	}
+}
+
+func TestSymlink(t *testing.T) {
+	path := "/home/local/ZOHOCORP/deepak-3386/todel/symlinktest/workspace/project/src/java/com/zoho/CircularLink"
+	fmt.Println(filepath.EvalSymlinks(path))
 }
 
 func TestPaths(t *testing.T) {

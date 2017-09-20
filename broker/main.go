@@ -26,6 +26,15 @@ const (
 	auditorBasic = "basic"
 )
 
+
+
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
+
 func main() {
 
 	app := cli.NewApp()
@@ -107,7 +116,7 @@ func initLogger(debug bool) {
 	logfile := "/var/log/authz.log"
 	f, err := os.Create(logfile)
 	fmt.Println("log file :" + logfile)
-	panic(err)
+	check(err)
 	logrus.SetOutput(f)
 	// Only log the warning severity or above.
 	logrus.SetLevel(logrus.DebugLevel)
